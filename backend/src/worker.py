@@ -6,6 +6,7 @@ from src.config.database import Session
 from src.config.settings import REDIS_URL
 from src.models import Job, Dataset, Report
 from src.services.business import analyze
+from src.services.ingest import public_records
 from src.services.reports import deliver
 from src.services.audit import record
 logging.basicConfig(level=logging.INFO)
@@ -16,7 +17,8 @@ def execute(job_id):
         j.status='running'; db.commit()
         try:
             d=db.get(Dataset,j.dataset_id)
-            result=analyze(d.records,j.params)
+            # 内部修订留痕字段不参与统计计算；固定基准仍取有效记录最初30日
+            result=analyze(public_records(d.records),j.params)
             json.dumps(result,allow_nan=False)
             j.result=result;j.status='completed';j.finished_at=time.time()
             record(db,'worker','job.completed',{'id':j.id})

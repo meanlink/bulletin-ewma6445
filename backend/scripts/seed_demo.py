@@ -4,6 +4,7 @@ from src.config.database import Session
 from migrations.initial import migrate
 from src.models import User, Dataset, Job, Report, Delivery, Audit
 from src.services.business import metadata, seed_records, analyze
+from src.services.ingest import public_records
 from src.services.reports import deliver
 from src.utils.security import hash_password
 from src.utils.serialization import checksum
@@ -19,11 +20,13 @@ def seed():
         d=db.scalar(select(Dataset).where(Dataset.name==m['dataset_name']))
         if not d:
             rows=seed_records()
-            d=Dataset(name=m['dataset_name'],source=m['short']+'-202611.csv',records=rows,checksum=checksum(rows),created_at=time.time())
+            d=Dataset(name=m['dataset_name'],source=m['short']+'-202611.csv',records=rows,checksum=checksum(rows),created_at=time.time(),
+                      ingest_log=[{'seq':1,'source':m['short']+'-202611.csv','received':len(rows),'accepted':len(rows),'ignored':0,'rejected':0}],
+                      rejected_records=[],revision=1)
             db.add(d); db.flush()
         if not db.scalar(select(Job).where(Job.name=='基线复核 · '+m['name'])):
             params={p['key']:p['default'] for p in m.get('parameters',[])}
-            result=analyze(d.records,params)
+            result=analyze(public_records(d.records),params)
             json.dumps(result,ensure_ascii=False,allow_nan=False)
             admin=db.scalar(select(User).where(User.role=='admin'))
             j=Job(name='基线复核 · '+m['name'],dataset_id=d.id,params=params,status='completed',result=result,created_by=admin.id,created_at=time.time()-3600,finished_at=time.time()-3595,approved=True)
